@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from utils.email_service import mail
 from flask_limiter import Limiter
 from flask_socketio import SocketIO
-
+from APIs import App 
 # Load environment variables
 load_dotenv()
 
