@@ -1,24 +1,54 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 
-const API_BASE_URL = 'http://16.16.204.22:10001/api/auth';
+const API_URL = 'http://16.16.204.22:10001';
 
-// Configure axios defaults
-axios.defaults.withCredentials = true;
-axios.defaults.headers.common['Accept'] = 'application/json';
-axios.defaults.headers.common['Content-Type'] = 'application/json';
-axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
-
-// Create axios instance with custom config
-const axiosInstance = axios.create({
-  baseURL: API_BASE_URL,
-  withCredentials: true,
+const api = axios.create({
+  baseURL: API_URL,
   headers: {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest'
-  }
+  },
+  withCredentials: true
 });
+
+api.interceptors.request.use(request => {
+  request.headers['Access-Control-Allow-Origin'] = 'http://localhost:5173';
+  request.headers['Access-Control-Allow-Credentials'] = 'true';
+  
+  console.log('Starting Request:', {
+    url: request.url,
+    method: request.method,
+    data: request.data,
+    headers: request.headers
+  });
+  return request;
+}, error => {
+  console.error('Request Error:', error);
+  return Promise.reject(error);
+});
+
+api.interceptors.response.use(
+  response => {
+    console.log('Response:', response);
+    return response;
+  },
+  error => {
+    if (error.response) {
+      console.error('Response Error:', {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers
+      });
+    } else if (error.request) {
+      console.error('Request Error:', error.request);
+    } else {
+      console.error('Error:', error.message);
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Helper function to handle API errors
 const handleApiError = (error) => {
@@ -44,7 +74,7 @@ const refreshTokenAndRetry = async (error) => {
     }
 
     // Get new access token
-    const response = await axiosInstance.post(`/refresh-token`, {
+    const response = await api.post(`/refresh-token`, {
       refresh_token: refreshToken
     });
 
@@ -53,12 +83,12 @@ const refreshTokenAndRetry = async (error) => {
     localStorage.setItem('token', access_token);
 
     // Update axios default header
-    axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+    api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
 
     // Retry the original request
     const config = error.config;
     config.headers['Authorization'] = `Bearer ${access_token}`;
-    return axiosInstance(config);
+    return api(config);
   } catch (error) {
     // If refresh fails, logout user
     store.dispatch(logout());
@@ -77,7 +107,7 @@ const loadInitialState = () => {
 
     // Set axios default header if token exists
     if (savedToken) {
-      axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
+      api.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
     }
 
     return {
@@ -110,7 +140,7 @@ export const registerUser = createAsyncThunk(
   'auth/register',
   async (userData, { rejectWithValue }) => {
     try {
-      const response = await axiosInstance.post(`/register`, userData, {
+      const response = await api.post(`/register`, userData, {
         headers: {
           'Content-Type': 'application/json'
         },
@@ -128,7 +158,8 @@ export const loginUser = createAsyncThunk(
   async (credentials, { rejectWithValue }) => {
     try {
       console.log('Attempting login with:', credentials);
-      const response = await axiosInstance.post(`/login`, credentials);
+      
+      const response = await api.post(`/login`, credentials);
       console.log('Login response:', response.data);
 
       const { user, access_token, refresh_token } = response.data;
@@ -140,12 +171,15 @@ export const loginUser = createAsyncThunk(
       localStorage.setItem('preferences', JSON.stringify(user.preferences || {}));
 
       // Set axios default header
-      axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
 
       return response.data;
     } catch (error) {
       console.error('Login error:', error.response?.data || error.message);
-      return rejectWithValue(handleApiError(error));
+      if (error.response?.data?.error) {
+        return rejectWithValue(error.response.data.error);
+      }
+      return rejectWithValue(error.message || 'Login failed. Please try again.');
     }
   }
 );
@@ -154,7 +188,7 @@ export const logoutUser = createAsyncThunk(
   'auth/logout',
   async (_, { rejectWithValue }) => {
     try {
-      await axiosInstance.post(`/logout`);
+      await api.post(`/logout`);
 
       // Clear localStorage
       localStorage.removeItem('user');
@@ -163,11 +197,11 @@ export const logoutUser = createAsyncThunk(
       localStorage.removeItem('preferences');
 
       // Clear axios default header
-      delete axiosInstance.defaults.headers.common['Authorization'];
+      delete api.defaults.headers.common['Authorization'];
 
       return null;
     } catch (error) {
-      return rejectWithValue(handleApiError(error));
+      return rejectWithValue(error.message);
     }
   }
 );
@@ -176,7 +210,7 @@ export const updateProfile = createAsyncThunk(
   'auth/updateProfile',
   async (profileData, { getState, rejectWithValue }) => {
     try {
-      const response = await axiosInstance.put(`/profile`, profileData, {
+      const response = await api.put(`/profile`, profileData, {
         headers: {
           'Content-Type': 'application/json'
         },
@@ -196,7 +230,7 @@ export const uploadProfileImage = createAsyncThunk(
       const formData = new FormData();
       formData.append('image', imageFile);
 
-      const response = await axiosInstance.post(`/profile/image`, formData, {
+      const response = await api.post(`/profile/image`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -317,5 +351,3 @@ const authSlice = createSlice({
 
 export const { logout, clearError, updateUserPreferences, setTheme } = authSlice.actions;
 export default authSlice.reducer;
-
-export const api = axiosInstance;
