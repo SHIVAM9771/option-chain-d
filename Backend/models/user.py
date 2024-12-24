@@ -1,4 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import enum
 
@@ -11,38 +12,35 @@ class UserRole(enum.Enum):
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    firebase_uid = db.Column(db.String(128), unique=True, nullable=False)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128))
     role = db.Column(db.Enum(UserRole), default=UserRole.USER)
-    is_email_verified = db.Column(db.Boolean, default=False)
-    is_active = db.Column(db.Boolean, default=True)
+    firebase_uid = db.Column(db.String(128), unique=True, nullable=True)
+    email_verified = db.Column(db.Boolean, default=False)
+    subscription_end = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    last_login = db.Column(db.DateTime)
-    profile_image = db.Column(db.String(200))
-    subscription_expires = db.Column(db.DateTime)
-    
-    @property
-    def is_admin(self):
-        return self.role == UserRole.ADMIN
-    
-    @property
-    def is_premium(self):
-        if self.role == UserRole.PREMIUM and self.subscription_expires:
-            return self.subscription_expires > datetime.utcnow()
-        return False
-    
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def is_subscription_active(self):
+        if self.subscription_end is None:
+            return False
+        return datetime.utcnow() <= self.subscription_end
+
     def to_dict(self):
         return {
             'id': self.id,
             'username': self.username,
             'email': self.email,
             'role': self.role.value,
-            'is_email_verified': self.is_email_verified,
-            'is_active': self.is_active,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'last_login': self.last_login.isoformat() if self.last_login else None,
-            'profile_image': self.profile_image,
-            'is_premium': self.is_premium,
-            'subscription_expires': self.subscription_expires.isoformat() if self.subscription_expires else None
+            'email_verified': self.email_verified,
+            'subscription_end': self.subscription_end.isoformat() if self.subscription_end else None,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
         }

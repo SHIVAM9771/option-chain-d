@@ -404,12 +404,11 @@ if __name__ == "__main__":
             admin_user = User(
                 username="admin",
                 email="admin@admin.com",
-                role=UserRole.ADMIN,
-                email_verified=True,
+                role=UserRole.ADMIN
             )
             admin_user.set_password("admin@123")
             db.session.add(admin_user)
             db.session.commit()
             print("Created default admin user")
 
-    socketio.run(app, host="0.0.0.0", port=10001, debug=True)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
