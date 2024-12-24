@@ -30,6 +30,11 @@ export function AuthProvider({ children }) {
       const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/register`, {
         email,
         password
+      }, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
       const { user, token } = response.data;
       setUser(user);
@@ -48,6 +53,11 @@ export function AuthProvider({ children }) {
       const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, {
         email,
         password
+      }, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
       const { user, token } = response.data;
       setUser(user);
@@ -63,7 +73,12 @@ export function AuthProvider({ children }) {
   // Logout function
   async function logout() {
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/logout`);
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/logout`, {}, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
       setUser(null);
       setToken(null);
       // Remove axios default header
@@ -86,6 +101,11 @@ export function AuthProvider({ children }) {
       
       const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/google`, {
         idToken
+      }, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
       
       const { user, token } = response.data;
