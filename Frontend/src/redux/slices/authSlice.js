@@ -12,12 +12,15 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest'
   },
-  withCredentials: false, // Changed to false for now
-  timeout: 10000 // 10 second timeout
+  withCredentials: true
 });
 
 // Add request interceptor for debugging
 api.interceptors.request.use(request => {
+  // Add CORS headers to all requests
+  request.headers['Access-Control-Allow-Origin'] = 'http://localhost:5173';
+  request.headers['Access-Control-Allow-Credentials'] = 'true';
+  
   console.log('Starting Request:', {
     url: request.url,
     method: request.method,
@@ -37,11 +40,17 @@ api.interceptors.response.use(
     return response;
   },
   error => {
-    console.error('Response Error:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status
-    });
+    if (error.response) {
+      console.error('Response Error:', {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers
+      });
+    } else if (error.request) {
+      console.error('Request Error:', error.request);
+    } else {
+      console.error('Error:', error.message);
+    }
     return Promise.reject(error);
   }
 );
@@ -52,13 +61,6 @@ export const loginUser = createAsyncThunk(
   async (credentials, { rejectWithValue }) => {
     try {
       console.log('Attempting login with:', credentials);
-      
-      // First try a simple OPTIONS request to check server availability
-      try {
-        await api.options('/api/auth/login');
-      } catch (error) {
-        throw new Error('Server is not accessible');
-      }
       
       const response = await api.post('/api/auth/login', credentials);
       console.log('Login successful:', response.data);
@@ -76,13 +78,10 @@ export const loginUser = createAsyncThunk(
       return response.data;
     } catch (error) {
       console.error('Login error:', error);
-      if (error.message === 'Server is not accessible') {
-        return rejectWithValue('Server is not accessible. Please try again later.');
-      }
       if (error.response?.data?.error) {
         return rejectWithValue(error.response.data.error);
       }
-      return rejectWithValue('Login failed. Please check your credentials and try again.');
+      return rejectWithValue(error.message || 'Login failed. Please try again.');
     }
   }
 );

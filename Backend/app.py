@@ -23,15 +23,18 @@ def create_app():
     app.config.from_object(Config)
     
     # Initialize CORS with more permissive settings for development
-    CORS(app, resources={
-        r"/*": {
-            "origins": "*",
-            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
-            "supports_credentials": True,
-            "expose_headers": ["Content-Range", "X-Content-Range"]
+    CORS(app, 
+        resources={
+            r"/*": {
+                "origins": ["http://localhost:5173", "http://16.16.204.22:10001", "http://16.16.204.22:5000"],
+                "methods": ["GET", "HEAD", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"],
+                "allow_headers": ["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
+                "expose_headers": ["Content-Range", "X-Content-Range"],
+                "supports_credentials": True,
+                "max_age": 120  # Preflight request caching time in seconds
+            }
         }
-    })
+    )
     
     # Initialize database
     db.init_app(app)
@@ -53,7 +56,7 @@ def create_app():
     # Initialize SocketIO
     socketio = SocketIO(
         app,
-        cors_allowed_origins=["*"],
+        cors_allowed_origins=["http://localhost:5173", "http://16.16.204.22:10001", "http://16.16.204.22:5000"],
         async_mode="threading",
         ping_timeout=10,
         ping_interval=5,
@@ -83,10 +86,15 @@ def create_app():
         if origin in ["http://localhost:5173", "http://16.16.204.22:10001", "http://16.16.204.22:5000"]:
             response.headers['Access-Control-Allow-Origin'] = origin
             response.headers['Access-Control-Allow-Credentials'] = 'true'
-        else:
-            response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, HEAD, POST, OPTIONS, PUT, PATCH, DELETE'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, Origin, X-Requested-With'
+            response.headers['Access-Control-Expose-Headers'] = 'Content-Range, X-Content-Range'
+            
+            if request.method == 'OPTIONS':
+                # Handle preflight requests
+                response.status_code = 200
+                return response
+                
         return response
     
     # WebSocket events
