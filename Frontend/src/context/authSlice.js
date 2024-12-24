@@ -1,17 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axios from 'axios';
+import { api } from '../api/axiosConfig';
 
 const API_URL = 'http://16.16.204.22:10001';
-
-const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-    'X-Requested-With': 'XMLHttpRequest'
-  },
-  withCredentials: true
-});
 
 api.interceptors.request.use(request => {
   request.headers['Access-Control-Allow-Origin'] = 'http://localhost:5173';
