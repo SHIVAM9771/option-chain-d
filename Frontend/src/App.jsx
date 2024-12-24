@@ -49,6 +49,7 @@ function App() {
                 <Route path="/blog" element={<Blog />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/about" element={<About />} />
+                <Route path="/login" element={<Login />} />
               </Route>
               
               {/* 404 Route */}

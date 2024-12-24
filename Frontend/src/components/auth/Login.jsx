@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, Link } from 'react-router-dom';
-import axios from 'axios';
-import { loginUser, clearError } from '../../context/authSlice';
 import { motion } from 'framer-motion';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '../../context/AuthContext';
+import { useSelector } from 'react-redux';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -13,24 +12,23 @@ const Login = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   
-  const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { loading, error, isAuthenticated } = useSelector((state) => state.auth);
+  const { login, currentUser } = useAuth();
   const theme = useSelector((state) => state.theme.theme);
   
   useEffect(() => {
-    if (isAuthenticated) {
-      const token = localStorage.getItem('token');
-      if (token) {
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      }
+    if (currentUser) {
       navigate('/dashboard');
     }
-    return () => {
-      dispatch(clearError());
-    };
-  }, [isAuthenticated, navigate, dispatch]);
+    const rememberedEmail = localStorage.getItem('rememberedEmail');
+    if (rememberedEmail) {
+      setFormData(prev => ({ ...prev, email: rememberedEmail }));
+      setRememberMe(true);
+    }
+  }, [currentUser, navigate]);
   
   const handleChange = (e) => {
     setFormData({
@@ -42,17 +40,22 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const result = await dispatch(loginUser(formData)).unwrap();
-      if (result.token) {
-        axios.defaults.headers.common['Authorization'] = `Bearer ${result.token}`;
-        if (rememberMe) {
-          localStorage.setItem('rememberedEmail', formData.email);
-        } else {
-          localStorage.removeItem('rememberedEmail');
-        }
+      setError('');
+      setLoading(true);
+      await login(formData.email, formData.password);
+      
+      if (rememberMe) {
+        localStorage.setItem('rememberedEmail', formData.email);
+      } else {
+        localStorage.removeItem('rememberedEmail');
       }
+      
+      navigate('/dashboard');
     } catch (err) {
       console.error('Login failed:', err);
+      setError(err.message || 'Failed to sign in');
+    } finally {
+      setLoading(false);
     }
   };
   
@@ -200,16 +203,13 @@ const Login = () => {
             </button>
           </div>
           
-          <div className={`text-sm text-center ${
-            theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-          }`}>
-            Don't have an account?{' '}
-            <Link
-              to="/register"
-              className="font-medium text-indigo-600 hover:text-indigo-500"
-            >
-              Register here
-            </Link>
+          <div className="text-center">
+            <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+              Don't have an account?{' '}
+              <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-500">
+                Sign up
+              </Link>
+            </p>
           </div>
         </form>
       </motion.div>

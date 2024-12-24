@@ -8,45 +8,78 @@ from flask_cors import cross_origin
 # Create blueprint
 auth_bp = Blueprint("auth", __name__)
 
+@auth_bp.route("/register", methods=["POST"])
+@cross_origin(supports_credentials=True)
+def register():
+    """Register a new user with email and password"""
+    try:
+        data = request.get_json()
+        if not data or 'email' not in data or 'password' not in data:
+            return jsonify({"error": "Email and password are required"}), 400
+            
+        # Create user in Firebase
+        user_record = firebase_admin.create_user(
+            email=data['email'],
+            password=data['password']
+        )
+        
+        # Create user in our database
+        user = User(
+            firebase_uid=user_record.uid,
+            email=user_record.email,
+            username=data.get('username', user_record.email.split('@')[0]),
+            email_verified=False
+        )
+        db.session.add(user)
+        db.session.commit()
+        
+        # Create custom token
+        custom_token = firebase_admin.create_custom_token(user_record.uid)
+        
+        return jsonify({
+            "user": user.to_dict(),
+            "token": custom_token.decode('utf-8')
+        }), 201
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
 @auth_bp.route("/login", methods=["POST"])
 @cross_origin(supports_credentials=True)
 def login():
-    """Login with Firebase token"""
+    """Login with email and password"""
     try:
         data = request.get_json()
-        if not data or 'idToken' not in data:
-            return jsonify({"error": "ID token is required"}), 400
+        if not data or 'email' not in data or 'password' not in data:
+            return jsonify({"error": "Email and password are required"}), 400
             
-        # Verify Firebase token
-        user_info = firebase_admin.verify_id_token(data['idToken'])
+        # Sign in with Firebase
+        user_record = firebase_admin.sign_in_with_email_password(
+            email=data['email'],
+            password=data['password']
+        )
         
-        # Check if user exists in our database
-        user = User.query.filter_by(firebase_uid=user_info['user_id']).first()
+        # Get user from our database
+        user = User.query.filter_by(firebase_uid=user_record['localId']).first()
         
         if not user:
-            # Create user in our database
+            # Create user in our database if they don't exist
             user = User(
-                firebase_uid=user_info['user_id'],
-                email=user_info['email'],
-                username=user_info.get('name', user_info['email'].split('@')[0]),
-                email_verified=user_info.get('email_verified', False)
+                firebase_uid=user_record['localId'],
+                email=user_record['email'],
+                username=user_record['email'].split('@')[0],
+                email_verified=user_record.get('emailVerified', False)
             )
             db.session.add(user)
             db.session.commit()
         
-        # Update user info
-        user.email_verified = user_info.get('email_verified', False)
-        db.session.commit()
-        
         return jsonify({
             "user": user.to_dict(),
-            "token": data['idToken']
+            "token": user_record['idToken']
         }), 200
         
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 401
     except Exception as e:
-        return jsonify({"error": "Authentication failed"}), 401
+        return jsonify({"error": str(e)}), 401
 
 @auth_bp.route("/verify-token", methods=["POST"])
 @cross_origin(supports_credentials=True)
@@ -54,36 +87,36 @@ def verify_token():
     """Verify Firebase ID token and return user info"""
     try:
         data = request.get_json()
-        if not data or 'idToken' not in data:
-            return jsonify({"error": "ID token is required"}), 400
+        if not data or 'token' not in data:
+            return jsonify({"error": "Token is required"}), 400
             
         # Verify Firebase token
-        user_info = firebase_admin.verify_id_token(data['idToken'])
+        decoded_token = firebase_admin.verify_id_token(data['token'])
         
-        # Check if user exists in our database
-        user = User.query.filter_by(firebase_uid=user_info['user_id']).first()
+        # Get user from our database
+        user = User.query.filter_by(firebase_uid=decoded_token['uid']).first()
         
         if not user:
-            # Create user in our database
-            user = User(
-                firebase_uid=user_info['user_id'],
-                email=user_info['email'],
-                username=user_info.get('name', user_info['email'].split('@')[0]),
-                email_verified=user_info.get('email_verified', False)
-            )
-            db.session.add(user)
-            db.session.commit()
+            return jsonify({"error": "User not found"}), 404
         
-        # Update user info
-        user.email_verified = user_info.get('email_verified', False)
-        db.session.commit()
+        return jsonify({
+            "user": user.to_dict()
+        }), 200
         
-        return jsonify(user.to_dict()), 200
-        
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 401
     except Exception as e:
-        return jsonify({"error": "Authentication failed"}), 401
+        return jsonify({"error": str(e)}), 401
+
+@auth_bp.route("/logout", methods=["POST"])
+@cross_origin(supports_credentials=True)
+@firebase_token_required
+def logout(current_user):
+    """Logout user"""
+    try:
+        # Revoke refresh tokens for user
+        firebase_admin.revoke_refresh_tokens(current_user.firebase_uid)
+        return jsonify({"message": "Successfully logged out"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 @auth_bp.route("/user/profile", methods=["GET"])
 @cross_origin(supports_credentials=True)

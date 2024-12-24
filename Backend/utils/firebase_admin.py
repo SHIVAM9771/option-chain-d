@@ -1,116 +1,58 @@
 import firebase_admin
-from firebase_admin import credentials, auth
+from firebase_admin import auth, credentials
+import requests
 import os
 
-# Get the absolute path to the credentials file
-cred_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'credentials', 'firebase-credentials.json')
-
-# Initialize Firebase Admin
-cred = credentials.Certificate(cred_path)
-firebase_app = firebase_admin.initialize_app(cred)
-
 class FirebaseAdmin:
-    @staticmethod
-    def verify_id_token(id_token):
-        """Verify Firebase ID token and return user info"""
-        try:
-            decoded_token = auth.verify_id_token(id_token)
-            return {
-                'user_id': decoded_token['uid'],
-                'email': decoded_token.get('email'),
-                'email_verified': decoded_token.get('email_verified', False),
-                'name': decoded_token.get('name'),
-                'picture': decoded_token.get('picture')
-            }
-        except Exception as e:
-            raise ValueError(f'Invalid token: {str(e)}')
+    def __init__(self):
+        # Initialize Firebase Admin SDK
+        cred = credentials.Certificate(os.getenv('FIREBASE_ADMIN_SDK_PATH'))
+        self.app = firebase_admin.initialize_app(cred)
+        self.api_key = os.getenv('FIREBASE_API_KEY')
+        
+    def create_user(self, email, password):
+        """Create a new user with email and password"""
+        return auth.create_user(
+            email=email,
+            password=password
+        )
     
-    @staticmethod
-    def get_user(uid):
-        """Get user info by UID"""
-        try:
-            user = auth.get_user(uid)
-            return {
-                'user_id': user.uid,
-                'email': user.email,
-                'email_verified': user.email_verified,
-                'name': user.display_name,
-                'picture': user.photo_url,
-                'disabled': user.disabled
-            }
-        except auth.UserNotFoundError:
-            raise ValueError('User not found')
-        except Exception as e:
-            raise ValueError(f'Error getting user: {str(e)}')
+    def sign_in_with_email_password(self, email, password):
+        """Sign in a user with email and password"""
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={self.api_key}"
+        data = {
+            "email": email,
+            "password": password,
+            "returnSecureToken": True
+        }
+        response = requests.post(url, json=data)
+        if response.status_code != 200:
+            raise Exception(response.json().get('error', {}).get('message', 'Authentication failed'))
+        return response.json()
     
-    @staticmethod
-    def create_user(email, password, display_name=None):
-        """Create a new Firebase user"""
-        try:
-            user = auth.create_user(
-                email=email,
-                password=password,
-                display_name=display_name,
-                email_verified=False
-            )
-            return {
-                'user_id': user.uid,
-                'email': user.email,
-                'name': user.display_name
-            }
-        except auth.EmailAlreadyExistsError:
-            raise ValueError('Email already exists')
-        except Exception as e:
-            raise ValueError(f'Error creating user: {str(e)}')
+    def verify_id_token(self, id_token):
+        """Verify Firebase ID token"""
+        return auth.verify_id_token(id_token)
     
-    @staticmethod
-    def update_user(uid, **kwargs):
+    def create_custom_token(self, uid):
+        """Create a custom token for a user"""
+        return auth.create_custom_token(uid)
+    
+    def revoke_refresh_tokens(self, uid):
+        """Revoke all refresh tokens for a user"""
+        auth.revoke_refresh_tokens(uid)
+    
+    def get_user(self, uid):
+        """Get user by UID"""
+        return auth.get_user(uid)
+    
+    def update_user(self, uid, **kwargs):
         """Update user properties"""
-        try:
-            user = auth.update_user(
-                uid,
-                **kwargs
-            )
-            return {
-                'user_id': user.uid,
-                'email': user.email,
-                'email_verified': user.email_verified,
-                'name': user.display_name,
-                'picture': user.photo_url
-            }
-        except auth.UserNotFoundError:
-            raise ValueError('User not found')
-        except Exception as e:
-            raise ValueError(f'Error updating user: {str(e)}')
+        return auth.update_user(uid, **kwargs)
     
-    @staticmethod
-    def delete_user(uid):
+    def delete_user(self, uid):
         """Delete a user"""
-        try:
-            auth.delete_user(uid)
-            return True
-        except auth.UserNotFoundError:
-            raise ValueError('User not found')
-        except Exception as e:
-            raise ValueError(f'Error deleting user: {str(e)}')
-    
-    @staticmethod
-    def verify_email(uid):
-        """Set email as verified"""
-        try:
-            user = auth.update_user(
-                uid,
-                email_verified=True
-            )
-            return {
-                'user_id': user.uid,
-                'email': user.email,
-                'email_verified': user.email_verified
-            }
-        except auth.UserNotFoundError:
-            raise ValueError('User not found')
-        except Exception as e:
-            raise ValueError(f'Error verifying email: {str(e)}')
+        return auth.delete_user(uid)
 
-# Create singleton instance
+# Create a singleton instance
 firebase_admin = FirebaseAdmin()
