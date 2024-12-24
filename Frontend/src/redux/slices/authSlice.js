@@ -2,17 +2,18 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 
 // Get the API URL from environment variables or use a default
-const API_URL = import.meta.env.VITE_API_URL || 'http://16.16.204.22:10001';
+const API_URL = 'http://16.16.204.22:10001';
 
-// Create axios instance with default config
+// Create axios instance with custom config
 const api = axios.create({
   baseURL: API_URL,
   headers: {
+    'Accept': 'application/json',
     'Content-Type': 'application/json',
-    'Accept': 'application/json'
+    'X-Requested-With': 'XMLHttpRequest'
   },
-  timeout: 10000, // 10 second timeout
-  withCredentials: true // Enable credentials
+  withCredentials: false, // Changed to false for now
+  timeout: 10000 // 10 second timeout
 });
 
 // Add request interceptor for debugging
@@ -20,9 +21,8 @@ api.interceptors.request.use(request => {
   console.log('Starting Request:', {
     url: request.url,
     method: request.method,
-    headers: request.headers,
     data: request.data,
-    baseURL: request.baseURL
+    headers: request.headers
   });
   return request;
 }, error => {
@@ -40,83 +40,65 @@ api.interceptors.response.use(
     console.error('Response Error:', {
       message: error.message,
       response: error.response?.data,
-      status: error.response?.status,
-      config: {
-        url: error.config?.url,
-        baseURL: error.config?.baseURL,
-        method: error.config?.method
-      }
+      status: error.response?.status
     });
     return Promise.reject(error);
   }
 );
 
 // Async thunks
-export const register = createAsyncThunk(
-  'auth/register',
-  async ({ email, password }, { rejectWithValue }) => {
-    try {
-      const response = await api.post('/api/auth/register', { email, password });
-      return response.data;
-    } catch (error) {
-      if (error.response?.data?.error) {
-        return rejectWithValue(error.response.data.error);
-      }
-      return rejectWithValue('Failed to create account. Please try again.');
-    }
-  }
-);
-
-export const login = createAsyncThunk(
+export const loginUser = createAsyncThunk(
   'auth/login',
-  async ({ email, password }, { rejectWithValue }) => {
+  async (credentials, { rejectWithValue }) => {
     try {
-      console.log('Attempting login with:', { email, apiUrl: API_URL });
+      console.log('Attempting login with:', credentials);
       
-      // First try to check if the server is accessible
+      // First try a simple OPTIONS request to check server availability
       try {
         await api.options('/api/auth/login');
       } catch (error) {
-        console.error('Server check failed:', error);
-        return rejectWithValue(`Server at ${API_URL} is not accessible. Please check if the server is running.`);
+        throw new Error('Server is not accessible');
       }
       
-      const response = await api.post('/api/auth/login', { email, password });
+      const response = await api.post('/api/auth/login', credentials);
+      console.log('Login successful:', response.data);
+      
+      const { user, access_token, refresh_token } = response.data;
+
+      // Store tokens and user data
+      localStorage.setItem('token', access_token);
+      localStorage.setItem('refreshToken', refresh_token);
+      localStorage.setItem('user', JSON.stringify(user));
+
+      // Update axios default header
+      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+
       return response.data;
     } catch (error) {
+      console.error('Login error:', error);
+      if (error.message === 'Server is not accessible') {
+        return rejectWithValue('Server is not accessible. Please try again later.');
+      }
       if (error.response?.data?.error) {
         return rejectWithValue(error.response.data.error);
       }
-      if (error.code === 'ERR_NETWORK') {
-        return rejectWithValue(`Unable to connect to server at ${API_URL}. Please check if the server is running.`);
-      }
-      return rejectWithValue('Invalid email or password.');
+      return rejectWithValue('Login failed. Please check your credentials and try again.');
     }
   }
 );
 
-export const logout = createAsyncThunk(
+export const logoutUser = createAsyncThunk(
   'auth/logout',
-  async (_, { getState, rejectWithValue }) => {
+  async (_, { rejectWithValue }) => {
     try {
-      const { token } = getState().auth;
-      if (token) {
-        await api.post('/api/auth/logout');
-      }
+      await api.post('/api/auth/logout');
+      
+      // Clear localStorage
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      
       return null;
-    } catch (error) {
-      console.error('Logout error:', error);
-      return rejectWithValue(error.message);
-    }
-  }
-);
-
-export const verifyToken = createAsyncThunk(
-  'auth/verifyToken',
-  async (token, { rejectWithValue }) => {
-    try {
-      const response = await api.post('/api/auth/verify-token', { token });
-      return response.data;
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -126,10 +108,11 @@ export const verifyToken = createAsyncThunk(
 const authSlice = createSlice({
   name: 'auth',
   initialState: {
-    user: null,
-    token: null,
+    user: JSON.parse(localStorage.getItem('user')) || null,
+    token: localStorage.getItem('token') || null,
     loading: false,
-    error: null
+    error: null,
+    isAuthenticated: !!localStorage.getItem('token')
   },
   reducers: {
     clearError: (state) => {
@@ -138,77 +121,47 @@ const authSlice = createSlice({
     setCredentials: (state, action) => {
       state.user = action.payload.user;
       state.token = action.payload.token;
+      state.isAuthenticated = true;
     },
     clearCredentials: (state) => {
       state.user = null;
       state.token = null;
+      state.isAuthenticated = false;
     }
   },
   extraReducers: (builder) => {
-    // Register
     builder
-      .addCase(register.pending, (state) => {
+      // Login
+      .addCase(loginUser.pending, (state) => {
         state.loading = true;
         state.error = null;
       })
-      .addCase(register.fulfilled, (state, action) => {
+      .addCase(loginUser.fulfilled, (state, action) => {
         state.loading = false;
         state.user = action.payload.user;
-        state.token = action.payload.token;
+        state.token = action.payload.access_token;
+        state.isAuthenticated = true;
       })
-      .addCase(register.rejected, (state, action) => {
+      .addCase(loginUser.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload;
-      });
-
-    // Login
-    builder
-      .addCase(login.pending, (state) => {
-        state.loading = true;
-        state.error = null;
+        state.error = action.payload || 'Login failed';
       })
-      .addCase(login.fulfilled, (state, action) => {
-        state.loading = false;
-        state.user = action.payload.user;
-        state.token = action.payload.token;
-      })
-      .addCase(login.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      });
-
-    // Logout
-    builder
-      .addCase(logout.pending, (state) => {
+      // Logout
+      .addCase(logoutUser.pending, (state) => {
         state.loading = true;
       })
-      .addCase(logout.fulfilled, (state) => {
-        state.loading = false;
+      .addCase(logoutUser.fulfilled, (state) => {
         state.user = null;
         state.token = null;
+        state.loading = false;
+        state.isAuthenticated = false;
       })
-      .addCase(logout.rejected, (state, action) => {
+      .addCase(logoutUser.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
-      });
-
-    // Verify Token
-    builder
-      .addCase(verifyToken.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(verifyToken.fulfilled, (state, action) => {
-        state.loading = false;
-        state.user = action.payload.user;
-      })
-      .addCase(verifyToken.rejected, (state) => {
-        state.loading = false;
-        state.user = null;
-        state.token = null;
       });
   }
 });
 
 export const { clearError, setCredentials, clearCredentials } = authSlice.actions;
-
 export default authSlice.reducer;

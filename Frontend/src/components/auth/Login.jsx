@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
-import { useAuth } from '../../context/AuthContext';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import { loginUser } from '../../redux/slices/authSlice';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -12,15 +12,14 @@ const Login = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
   
   const navigate = useNavigate();
-  const { login, currentUser } = useAuth();
+  const dispatch = useDispatch();
+  const { user, loading, error } = useSelector((state) => state.auth);
   const theme = useSelector((state) => state.theme.theme);
   
   useEffect(() => {
-    if (currentUser) {
+    if (user) {
       navigate('/dashboard');
     }
     const rememberedEmail = localStorage.getItem('rememberedEmail');
@@ -28,7 +27,7 @@ const Login = () => {
       setFormData(prev => ({ ...prev, email: rememberedEmail }));
       setRememberMe(true);
     }
-  }, [currentUser, navigate]);
+  }, [user, navigate]);
   
   const handleChange = (e) => {
     setFormData({
@@ -40,9 +39,7 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      setError('');
-      setLoading(true);
-      await login(formData.email, formData.password);
+      const result = await dispatch(loginUser(formData)).unwrap();
       
       if (rememberMe) {
         localStorage.setItem('rememberedEmail', formData.email);
@@ -50,12 +47,11 @@ const Login = () => {
         localStorage.removeItem('rememberedEmail');
       }
       
-      navigate('/dashboard');
+      if (result.user) {
+        navigate('/dashboard');
+      }
     } catch (err) {
       console.error('Login failed:', err);
-      setError(err.message || 'Failed to sign in');
-    } finally {
-      setLoading(false);
     }
   };
   
@@ -84,6 +80,12 @@ const Login = () => {
           </p>
         </div>
         
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+            <span className="block sm:inline">{error}</span>
+          </div>
+        )}
+        
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md space-y-4">
             <div>
@@ -97,66 +99,64 @@ const Login = () => {
                 name="email"
                 type="email"
                 required
-                className={`mt-1 appearance-none relative block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:text-sm ${
-                  theme === 'dark' 
-                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
-                    : 'border-gray-300 placeholder-gray-500 text-gray-900'
-                }`}
-                placeholder="Email address"
                 value={formData.email}
                 onChange={handleChange}
+                className={`mt-1 appearance-none relative block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:text-sm ${
+                  theme === 'dark' 
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                }`}
+                placeholder="Enter your email"
               />
             </div>
             
-            <div>
+            <div className="relative">
               <label htmlFor="password" className={`block text-sm font-medium ${
                 theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
               }`}>
                 Password
               </label>
-              <div className="relative">
+              <div className="mt-1 relative">
                 <input
                   id="password"
                   name="password"
                   type={showPassword ? "text" : "password"}
                   required
-                  className={`mt-1 appearance-none relative block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:text-sm ${
-                    theme === 'dark' 
-                      ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
-                      : 'border-gray-300 placeholder-gray-500 text-gray-900'
-                  }`}
-                  placeholder="Password"
                   value={formData.password}
                   onChange={handleChange}
+                  className={`appearance-none relative block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:text-sm ${
+                    theme === 'dark'
+                      ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
+                      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                  }`}
+                  placeholder="Enter your password"
                 />
                 <button
                   type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
                   onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
                 >
                   {showPassword ? (
-                    <EyeSlashIcon className={`h-5 w-5 ${
-                      theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                    }`} />
+                    <EyeSlashIcon className="h-5 w-5 text-gray-400" />
                   ) : (
-                    <EyeIcon className={`h-5 w-5 ${
-                      theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                    }`} />
+                    <EyeIcon className="h-5 w-5 text-gray-400" />
                   )}
                 </button>
               </div>
             </div>
           </div>
-          
+
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               <input
                 id="remember-me"
                 name="remember-me"
                 type="checkbox"
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
+                className={`h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 ${
+                  theme === 'dark' ? 'bg-gray-700' : 'bg-white'
+                }`}
               />
               <label htmlFor="remember-me" className={`ml-2 block text-sm ${
                 theme === 'dark' ? 'text-gray-300' : 'text-gray-900'
@@ -164,54 +164,35 @@ const Login = () => {
                 Remember me
               </label>
             </div>
-            
+
             <div className="text-sm">
               <Link to="/forgot-password" className="font-medium text-indigo-600 hover:text-indigo-500">
                 Forgot your password?
               </Link>
             </div>
           </div>
-          
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-red-500 text-sm text-center bg-red-100 p-2 rounded"
-            >
-              {error}
-            </motion.div>
-          )}
-          
+
           <div>
             <button
               type="submit"
               disabled={loading}
-              className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-lg text-white ${
-                loading
-                  ? 'bg-indigo-400 cursor-not-allowed'
-                  : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
+              className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${
+                loading ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
-              {loading ? (
-                <div className="flex items-center">
-                  <div className="w-5 h-5 border-t-2 border-b-2 border-white rounded-full animate-spin mr-2"></div>
-                  Signing in...
-                </div>
-              ) : (
-                'Sign in'
-              )}
+              {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </div>
-          
-          <div className="text-center">
-            <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-              Don't have an account?{' '}
-              <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-500">
-                Sign up
-              </Link>
-            </p>
-          </div>
         </form>
+        
+        <div className={`text-center text-sm ${
+          theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+        }`}>
+          Don't have an account?{' '}
+          <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-500">
+            Sign up
+          </Link>
+        </div>
       </motion.div>
     </div>
   );

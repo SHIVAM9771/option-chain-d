@@ -22,13 +22,14 @@ def create_app():
     # Load configuration
     app.config.from_object(Config)
     
-    # Initialize CORS
+    # Initialize CORS with more permissive settings for development
     CORS(app, resources={
-        r"/api/*": {
-            "origins": ["http://localhost:5173", "http://16.16.204.22:10001", "http://16.16.204.22:5000"],
+        r"/*": {
+            "origins": "*",
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization", "Accept"],
-            "supports_credentials": True
+            "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
+            "supports_credentials": True,
+            "expose_headers": ["Content-Range", "X-Content-Range"]
         }
     })
     
@@ -52,7 +53,7 @@ def create_app():
     # Initialize SocketIO
     socketio = SocketIO(
         app,
-        cors_allowed_origins=["http://localhost:5173", "http://16.16.204.22:10001", "http://16.16.204.22:5000"],
+        cors_allowed_origins=["*"],
         async_mode="threading",
         ping_timeout=10,
         ping_interval=5,
