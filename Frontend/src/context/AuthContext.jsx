@@ -14,9 +14,37 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json'
   },
-  withCredentials: false // Set to false since we're allowing all origins
+  timeout: 10000 // 10 second timeout
 });
+
+// Add request interceptor for debugging
+api.interceptors.request.use(request => {
+  console.log('Starting Request:', {
+    url: request.url,
+    method: request.method,
+    headers: request.headers,
+    data: request.data
+  });
+  return request;
+});
+
+// Add response interceptor for debugging
+api.interceptors.response.use(
+  response => {
+    console.log('Response:', response);
+    return response;
+  },
+  error => {
+    console.error('Response Error:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    return Promise.reject(error);
+  }
+);
 
 const AuthContext = createContext(null);
 
@@ -55,24 +83,35 @@ export function AuthProvider({ children }) {
       return response.data;
     } catch (error) {
       console.error('Signup error:', error);
-      throw error.response?.data?.error || error.message;
+      if (error.response?.data?.error) {
+        throw new Error(error.response.data.error);
+      }
+      throw new Error('Failed to create account. Please try again.');
     }
   }
 
   // Login function
   async function login(email, password) {
     try {
+      console.log('Attempting login with:', { email });
       const response = await api.post('/api/auth/login', {
         email,
         password
       });
+      console.log('Login response:', response.data);
       const { user, token } = response.data;
       setUser(user);
       setToken(token);
       return response.data;
     } catch (error) {
       console.error('Login error:', error);
-      throw error.response?.data?.error || error.message;
+      if (error.response?.data?.error) {
+        throw new Error(error.response.data.error);
+      }
+      if (error.code === 'ERR_NETWORK') {
+        throw new Error('Unable to connect to server. Please check your internet connection.');
+      }
+      throw new Error('Invalid email or password.');
     }
   }
 
@@ -107,7 +146,10 @@ export function AuthProvider({ children }) {
       return response.data;
     } catch (error) {
       console.error('Google sign in error:', error);
-      throw error.response?.data?.error || error.message;
+      if (error.response?.data?.error) {
+        throw new Error(error.response.data.error);
+      }
+      throw new Error('Google sign in failed. Please try again.');
     }
   }
 

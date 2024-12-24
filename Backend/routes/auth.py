@@ -4,12 +4,13 @@ from datetime import datetime, timedelta
 from utils.firebase_admin import firebase_admin
 from utils.auth_middleware import firebase_token_required, admin_required
 from flask_cors import cross_origin
+import json
 
 # Create blueprint
 auth_bp = Blueprint("auth", __name__)
 
 @auth_bp.route("/register", methods=["POST"])
-@cross_origin(supports_credentials=True)
+@cross_origin()
 def register():
     """Register a new user with email and password"""
     try:
@@ -44,20 +45,29 @@ def register():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-@auth_bp.route("/login", methods=["POST"])
-@cross_origin(supports_credentials=True)
+@auth_bp.route("/login", methods=["POST", "OPTIONS"])
+@cross_origin()
 def login():
     """Login with email and password"""
+    if request.method == "OPTIONS":
+        return jsonify({"message": "OK"}), 200
+        
     try:
         data = request.get_json()
-        if not data or 'email' not in data or 'password' not in data:
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+            
+        if 'email' not in data or 'password' not in data:
             return jsonify({"error": "Email and password are required"}), 400
             
         # Sign in with Firebase
-        user_record = firebase_admin.sign_in_with_email_password(
-            email=data['email'],
-            password=data['password']
-        )
+        try:
+            user_record = firebase_admin.sign_in_with_email_password(
+                email=data['email'],
+                password=data['password']
+            )
+        except Exception as e:
+            return jsonify({"error": "Invalid email or password"}), 401
         
         # Get user from our database
         user = User.query.filter_by(firebase_uid=user_record['localId']).first()
@@ -79,10 +89,11 @@ def login():
         }), 200
         
     except Exception as e:
+        print(f"Login error: {str(e)}")  # Add debug logging
         return jsonify({"error": str(e)}), 401
 
 @auth_bp.route("/verify-token", methods=["POST"])
-@cross_origin(supports_credentials=True)
+@cross_origin()
 def verify_token():
     """Verify Firebase ID token and return user info"""
     try:
@@ -107,7 +118,7 @@ def verify_token():
         return jsonify({"error": str(e)}), 401
 
 @auth_bp.route("/logout", methods=["POST"])
-@cross_origin(supports_credentials=True)
+@cross_origin()
 @firebase_token_required
 def logout(current_user):
     """Logout user"""
@@ -119,14 +130,14 @@ def logout(current_user):
         return jsonify({"error": str(e)}), 400
 
 @auth_bp.route("/user/profile", methods=["GET"])
-@cross_origin(supports_credentials=True)
+@cross_origin()
 @firebase_token_required
 def get_profile(current_user):
     """Get user profile"""
     return jsonify(current_user.to_dict()), 200
 
 @auth_bp.route("/user/profile", methods=["PUT"])
-@cross_origin(supports_credentials=True)
+@cross_origin()
 @firebase_token_required
 def update_profile(current_user):
     """Update user profile"""
@@ -152,7 +163,7 @@ def update_profile(current_user):
         return jsonify({"error": str(e)}), 400
 
 @auth_bp.route("/user/upgrade", methods=["POST"])
-@cross_origin(supports_credentials=True)
+@cross_origin()
 @firebase_token_required
 def upgrade_subscription(current_user):
     """Upgrade user to premium"""
@@ -170,7 +181,7 @@ def upgrade_subscription(current_user):
         return jsonify({"error": str(e)}), 400
 
 @auth_bp.route("/admin/users", methods=["GET"])
-@cross_origin(supports_credentials=True)
+@cross_origin()
 @firebase_token_required
 @admin_required
 def get_users(current_user):
@@ -179,7 +190,7 @@ def get_users(current_user):
     return jsonify([user.to_dict() for user in users]), 200
 
 @auth_bp.route("/admin/user/<int:user_id>", methods=["PUT"])
-@cross_origin(supports_credentials=True)
+@cross_origin()
 @firebase_token_required
 @admin_required
 def update_user(current_user, user_id):
