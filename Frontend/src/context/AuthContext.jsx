@@ -9,6 +9,15 @@ import {
 import { auth } from '../config/firebase';
 import axios from 'axios';
 
+// Create axios instance with default config
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  withCredentials: false // Set to false since we're allowing all origins
+});
+
 const AuthContext = createContext(null);
 
 export function useAuth() {
@@ -24,71 +33,60 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(null);
 
+  // Update axios authorization header when token changes
+  useEffect(() => {
+    if (token) {
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    } else {
+      delete api.defaults.headers.common['Authorization'];
+    }
+  }, [token]);
+
   // Signup function
   async function signup(email, password) {
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/register`, {
+      const response = await api.post('/api/auth/register', {
         email,
         password
-      }, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json'
-        }
       });
       const { user, token } = response.data;
       setUser(user);
       setToken(token);
-      // Set axios default header
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       return response.data;
     } catch (error) {
-      throw error.response?.data?.message || error.message;
+      console.error('Signup error:', error);
+      throw error.response?.data?.error || error.message;
     }
   }
 
   // Login function
   async function login(email, password) {
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, {
+      const response = await api.post('/api/auth/login', {
         email,
         password
-      }, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json'
-        }
       });
       const { user, token } = response.data;
       setUser(user);
       setToken(token);
-      // Set axios default header
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       return response.data;
     } catch (error) {
-      throw error.response?.data?.message || error.message;
+      console.error('Login error:', error);
+      throw error.response?.data?.error || error.message;
     }
   }
 
   // Logout function
   async function logout() {
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/logout`, {}, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      setUser(null);
-      setToken(null);
-      // Remove axios default header
-      delete axios.defaults.headers.common['Authorization'];
+      if (token) {
+        await api.post('/api/auth/logout');
+      }
     } catch (error) {
       console.error('Logout error:', error);
-      // Still clear the user state even if the API call fails
+    } finally {
       setUser(null);
       setToken(null);
-      delete axios.defaults.headers.common['Authorization'];
     }
   }
 
@@ -99,46 +97,38 @@ export function AuthProvider({ children }) {
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
       
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/google`, {
+      const response = await api.post('/api/auth/google', {
         idToken
-      }, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json'
-        }
       });
       
       const { user, token } = response.data;
       setUser(user);
       setToken(token);
-      // Set axios default header
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       return response.data;
     } catch (error) {
-      throw error.response?.data?.message || error.message;
+      console.error('Google sign in error:', error);
+      throw error.response?.data?.error || error.message;
     }
   }
 
-  // Verify token on mount and token change
+  // Check auth state on mount
   useEffect(() => {
-    const verifyToken = async () => {
-      if (token) {
-        try {
-          const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/verify-token`, {
-            token
-          });
+    const checkAuth = async () => {
+      try {
+        if (token) {
+          const response = await api.post('/api/auth/verify-token', { token });
           setUser(response.data.user);
-        } catch (error) {
-          console.error('Token verification failed:', error);
-          setUser(null);
-          setToken(null);
-          delete axios.defaults.headers.common['Authorization'];
         }
+      } catch (error) {
+        console.error('Token verification failed:', error);
+        setUser(null);
+        setToken(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
-    verifyToken();
+    checkAuth();
   }, [token]);
 
   const value = {

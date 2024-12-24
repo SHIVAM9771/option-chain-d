@@ -51,17 +51,13 @@ app.config["UPLOADED_FILES_DEST"] = app.config["UPLOAD_FOLDER"]
 app.config["UPLOADED_FILES_URL"] = "/uploads/"
 
 # Configure CORS
-CORS(app, 
-     resources={
-         r"/*": {
-             "origins": ["http://localhost:5173", "https://stockify-oc.vercel.app", "http://16.16.204.22:10001", "http://16.16.204.22:5000", "http://localhost:5000"],
-             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-             "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
-             "supports_credentials": True,
-             "expose_headers": ["Content-Range", "X-Content-Range"],
-             "max_age": 86400
-         }
-     })
+CORS(app,
+     origins=["http://localhost:5173", "https://stockify-oc.vercel.app", "http://16.16.204.22:10001", "http://16.16.204.22:5000", "http://localhost:5000", "*"],
+     allow_credentials=True,
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     expose_headers=["Content-Range", "X-Content-Range"],
+     max_age=86400)
 
 @app.after_request
 def after_request(response):
@@ -72,6 +68,11 @@ def after_request(response):
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
         response.headers['Access-Control-Max-Age'] = '86400'
+    else:
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
     return response
 
 # Initialize extensions
@@ -84,7 +85,7 @@ app.register_blueprint(auth_bp, url_prefix='/api/auth')
 # Initialize SocketIO with CORS settings
 socketio = SocketIO(
     app,
-    cors_allowed_origins=["http://localhost:5173", "https://stockify-oc.vercel.app", "http://16.16.204.22:10001", "http://16.16.204.22:5000", "http://localhost:5000"],
+    cors_allowed_origins=["http://localhost:5173", "https://stockify-oc.vercel.app", "http://16.16.204.22:10001", "http://16.16.204.22:5000", "http://localhost:5000", "*"],
     async_mode="threading",
     ping_timeout=10,
     ping_interval=5,
