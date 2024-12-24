@@ -9,9 +9,12 @@ import {
 import { auth } from '../config/firebase';
 import axios from 'axios';
 
+// Get the API URL from environment variables or use a default
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 // Create axios instance with default config
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
@@ -25,9 +28,13 @@ api.interceptors.request.use(request => {
     url: request.url,
     method: request.method,
     headers: request.headers,
-    data: request.data
+    data: request.data,
+    baseURL: request.baseURL
   });
   return request;
+}, error => {
+  console.error('Request Error:', error);
+  return Promise.reject(error);
 });
 
 // Add response interceptor for debugging
@@ -40,7 +47,12 @@ api.interceptors.response.use(
     console.error('Response Error:', {
       message: error.message,
       response: error.response?.data,
-      status: error.response?.status
+      status: error.response?.status,
+      config: {
+        url: error.config?.url,
+        baseURL: error.config?.baseURL,
+        method: error.config?.method
+      }
     });
     return Promise.reject(error);
   }
@@ -86,6 +98,9 @@ export function AuthProvider({ children }) {
       if (error.response?.data?.error) {
         throw new Error(error.response.data.error);
       }
+      if (error.code === 'ERR_NETWORK') {
+        throw new Error(`Unable to connect to server at ${API_URL}. Please check if the server is running.`);
+      }
       throw new Error('Failed to create account. Please try again.');
     }
   }
@@ -93,11 +108,21 @@ export function AuthProvider({ children }) {
   // Login function
   async function login(email, password) {
     try {
-      console.log('Attempting login with:', { email });
+      console.log('Attempting login with:', { email, apiUrl: API_URL });
+      
+      // First try to check if the server is accessible
+      try {
+        await api.options('/api/auth/login');
+      } catch (error) {
+        console.error('Server check failed:', error);
+        throw new Error(`Server at ${API_URL} is not accessible. Please check if the server is running.`);
+      }
+      
       const response = await api.post('/api/auth/login', {
         email,
         password
       });
+      
       console.log('Login response:', response.data);
       const { user, token } = response.data;
       setUser(user);
@@ -109,7 +134,7 @@ export function AuthProvider({ children }) {
         throw new Error(error.response.data.error);
       }
       if (error.code === 'ERR_NETWORK') {
-        throw new Error('Unable to connect to server. Please check your internet connection.');
+        throw new Error(`Unable to connect to server at ${API_URL}. Please check if the server is running.`);
       }
       throw new Error('Invalid email or password.');
     }
@@ -148,6 +173,9 @@ export function AuthProvider({ children }) {
       console.error('Google sign in error:', error);
       if (error.response?.data?.error) {
         throw new Error(error.response.data.error);
+      }
+      if (error.code === 'ERR_NETWORK') {
+        throw new Error(`Unable to connect to server at ${API_URL}. Please check if the server is running.`);
       }
       throw new Error('Google sign in failed. Please try again.');
     }
