@@ -11,6 +11,8 @@ from utils.auth_middleware import firebase_token_required
 from dotenv import load_dotenv
 from utils.email_service import mail
 from APIs import App 
+from sqlalchemy import text
+
 # Load environment variables
 load_dotenv()
 
@@ -38,7 +40,7 @@ def create_app():
         db.create_all()
         # Ensure the database is writable
         try:
-            db.session.execute('SELECT 1')
+            db.session.execute(text('SELECT 1'))
             db.session.commit()
         except Exception as e:
             print(f"Database error: {e}")
@@ -46,6 +48,18 @@ def create_app():
             db_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
             if os.path.exists(db_path):
                 os.chmod(db_path, 0o666)
+    
+    # Initialize SocketIO
+    socketio = SocketIO(
+        app,
+        cors_allowed_origins=["http://localhost:5173", "http://16.16.204.22:10001", "http://16.16.204.22:5000"],
+        async_mode="threading",
+        ping_timeout=10,
+        ping_interval=5,
+        always_connect=True,
+        logger=True,
+        engineio_logger=True
+    )
     
     # Register blueprints
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -61,18 +75,6 @@ def create_app():
     
     # Initialize email service
     mail.init_app(app)
-    
-    # Initialize SocketIO with CORS settings
-    socketio = SocketIO(
-        app,
-        cors_allowed_origins=["http://localhost:5173", "https://stockify-oc.vercel.app", "http://16.16.204.22:10001", "http://16.16.204.22:5000", "http://localhost:5000", "*"],
-        async_mode="threading",
-        ping_timeout=10,
-        ping_interval=5,
-        always_connect=True,
-        logger=True,
-        engineio_logger=True
-    )
     
     @app.after_request
     def after_request(response):
@@ -366,9 +368,9 @@ def create_app():
     def internal_error_handler(e):
         return jsonify({"error": "Internal server error. Please try again later."}), 500
 
-    return app
+    return app, socketio
 
-app = create_app()
+app, socketio = create_app()
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=10001, debug=True)
