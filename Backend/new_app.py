@@ -1,7 +1,8 @@
 from flask import Flask, jsonify, request, send_from_directory
 from flask_socketio import SocketIO
 from flask_cors import CORS
-from routes.auth import auth_bp, token_required
+from routes.auth import auth_bp
+from utils.auth_middleware import firebase_token_required
 from models.user import db
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -189,7 +190,7 @@ def stop_streaming():
 
 # Add API endpoints for percentage and IV data
 @app.route('/api/percentage-data/', methods=['POST', 'OPTIONS'])
-@token_required
+@firebase_token_required
 def get_percentage_data(current_user):
     if request.method == 'OPTIONS':
         return '', 200
@@ -221,7 +222,7 @@ def get_percentage_data(current_user):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/iv-data/', methods=['POST', 'OPTIONS'])
-@token_required
+@firebase_token_required
 def get_iv_data(current_user):
     if request.method == 'OPTIONS':
         return '', 200
@@ -253,7 +254,7 @@ def get_iv_data(current_user):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/delta-data/', methods=['POST', 'OPTIONS'])
-@token_required
+@firebase_token_required
 def get_delta_data(current_user):
     if request.method == 'OPTIONS':
         return '', 200
@@ -284,7 +285,7 @@ def get_delta_data(current_user):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/fut-data/', methods=['POST', 'OPTIONS'])
-@token_required
+@firebase_token_required
 def get_future_price_data(current_user):
     if request.method == 'OPTIONS':
         return '', 200

@@ -7,7 +7,8 @@ import time
 from flask_socketio import SocketIO
 import threading
 from models.user import db, User, UserRole
-from routes.auth import auth_bp, token_required, role_required
+from routes.auth import auth_bp
+from utils.auth_middleware import firebase_token_required
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import os
@@ -108,7 +109,7 @@ with app.app_context():
 
 # WebSocket events
 @socketio.on("connect")
-@token_required
+@firebase_token_required
 def handle_connect(current_user):
     print(f"Client connected: {current_user.username}")
 
@@ -270,100 +271,96 @@ def get_future():
         return jsonify({"error": str(e)}), 500
 
 # Protected API endpoints
-@app.route("/api/live-data/", methods=["GET"])
-@token_required
-@limiter.limit("100 per minute")
+@app.route("/api/live-data", methods=["GET"])
+@cross_origin(supports_credentials=True)
+@firebase_token_required
 def live_data(current_user):
     symbol = request.args.get("sid") or request.args.get("symbol")
     exp = request.args.get("exp_sid") or request.args.get("expiry")
     return App.get_live_data(symbol, exp)
 
-
-@app.route("/api/exp-date/", methods=["GET"])
+@app.route("/api/percentage-data", methods=["POST"])
 @cross_origin(supports_credentials=True)
-def exp_date():
-    try:
-        sid = request.args.get("sid") or request.args.get("symbol")
-        if not sid:
-            return jsonify({"error": "Symbol parameter is required (use 'sid' or 'symbol')"}), 400
-            
-        app.logger.info(f"Fetching expiry dates for symbol: {sid}")
-        response = App.get_exp_date(sid)
-        
-        # If response is a tuple, it means it's an error response
-        if isinstance(response, tuple):
-            return response
-            
-        # If we got a valid response
-        if response and isinstance(response, dict):
-            app.logger.info(f"Found expiry dates for {sid}")
-            return jsonify(response), 200
-        else:
-            app.logger.warning(f"No expiry dates found for {sid}")
-            return jsonify({"error": "No expiry dates found"}), 404
-
-    except Exception as e:
-        app.logger.error(f"Error fetching expiry dates: {str(e)}")
-        return jsonify({"error": f"Server error: {str(e)}"}), 500
-
-
-@app.route("/api/percentage-data/", methods=["POST"])
-@token_required
-@limiter.limit("100 per minute")
+@firebase_token_required
 def percentage_data(current_user):
-    """Endpoint to get percentage data based on strike price."""
-    data = request.json
-    symbol = data.get("sid") or data.get("symbol")
-    exp = data.get("exp_sid") or data.get("expiry")
-    isCe = data.get("option_type")
-    strike = data.get("strike")
+    try:
+        data = request.get_json()
+        sid = data.get("sid") or data.get("symbol")
+        exp_sid = data.get("exp_sid") or data.get("expiry")
+        strike = data.get("strike")
+        
+        if not all([sid, exp_sid, strike]):
+            return jsonify({"error": "Missing required parameters"}), 400
+            
+        app.logger.info(f"Fetching percentage data for {sid}, expiry: {exp_sid}, strike: {strike}")
+        result = App.get_percentage(sid, exp_sid, strike)
+        return result
+        
+    except Exception as e:
+        app.logger.error(f"Error fetching percentage data: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
-    response, status_code = App.get_percentage_data(symbol, exp, isCe, strike)
-    return response, status_code
-
-
-@app.route("/api/iv-data/", methods=["POST"])
-@token_required
-@limiter.limit("100 per minute")
+@app.route("/api/iv-data", methods=["POST"])
+@cross_origin(supports_credentials=True)
+@firebase_token_required
 def iv_data(current_user):
-    """Endpoint to get iv data based on strike price."""
-    data = request.json
-    symbol = data.get("sid") or data.get("symbol")
-    exp = data.get("exp_sid") or data.get("expiry")
-    isCe = data.get("option_type")
-    strike = data.get("strike")
+    try:
+        data = request.get_json()
+        sid = data.get("sid") or data.get("symbol")
+        exp_sid = data.get("exp_sid") or data.get("expiry")
+        strike = data.get("strike")
+        
+        if not all([sid, exp_sid, strike]):
+            return jsonify({"error": "Missing required parameters"}), 400
+            
+        app.logger.info(f"Fetching IV data for {sid}, expiry: {exp_sid}, strike: {strike}")
+        result = App.get_iv(sid, exp_sid, strike)
+        return result
+        
+    except Exception as e:
+        app.logger.error(f"Error fetching IV data: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
-    response, status_code = App.get_iv_data(symbol, exp, isCe, strike)
-    return response, status_code
-
-
-@app.route("/api/delta-data/", methods=["POST"])
-@token_required
-@limiter.limit("100 per minute")
+@app.route("/api/delta-data", methods=["POST"])
+@cross_origin(supports_credentials=True)
+@firebase_token_required
 def delta_data(current_user):
-    """Endpoint to get delta data based on strike price."""
-    data = request.json
-    symbol = data.get("sid") or data.get("symbol")
-    exp = data.get("exp_sid") or data.get("expiry")
-    strike = data.get("strike")
+    try:
+        data = request.get_json()
+        sid = data.get("sid") or data.get("symbol")
+        exp_sid = data.get("exp_sid") or data.get("expiry")
+        strike = data.get("strike")
+        
+        if not all([sid, exp_sid, strike]):
+            return jsonify({"error": "Missing required parameters"}), 400
+            
+        app.logger.info(f"Fetching delta data for {sid}, expiry: {exp_sid}, strike: {strike}")
+        result = App.get_delta(sid, exp_sid, strike)
+        return result
+        
+    except Exception as e:
+        app.logger.error(f"Error fetching delta data: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
-    response, status_code = App.get_delta_data(symbol, exp, strike)
-    return response, status_code
-
-
-@app.route("/api/fut-data/", methods=["POST"])
-@token_required
-@limiter.limit("100 per minute")
+@app.route("/api/fut-data", methods=["POST"])
+@cross_origin(supports_credentials=True)
+@firebase_token_required
 def fut_data(current_user):
-    """Endpoint to get fut data based on strike price."""
-    data = request.json
-    symbol = data.get("sid") or data.get("symbol")
-    exp = data.get("exp_sid") or data.get("expiry")
-    # strike = data.get('strike')
-
-    response, status_code = App.get_fut_data(symbol, exp)
-    return response, status_code
-
+    try:
+        data = request.get_json()
+        sid = data.get("sid") or data.get("symbol")
+        exp_sid = data.get("exp_sid") or data.get("expiry")
+        
+        if not all([sid, exp_sid]):
+            return jsonify({"error": "Missing required parameters"}), 400
+            
+        app.logger.info(f"Fetching future data for {sid}, expiry: {exp_sid}")
+        result = App.get_future(sid, exp_sid)
+        return result
+        
+    except Exception as e:
+        app.logger.error(f"Error fetching future data: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/*", methods=["OPTIONS"])
 def handle_options():
