@@ -1,5 +1,5 @@
-from flask import Flask
-from flask_cors import CORS
+from flask import Flask, jsonify, request, send_from_directory
+from flask_cors import CORS, cross_origin
 from routes.auth import auth_bp
 from models.user import db
 from config import Config
@@ -10,8 +10,6 @@ from flask_limiter.util import get_remote_address
 from utils.auth_middleware import firebase_token_required
 from dotenv import load_dotenv
 from utils.email_service import mail
-from flask_limiter import Limiter
-from flask_socketio import SocketIO
 from APIs import App 
 # Load environment variables
 load_dotenv()
