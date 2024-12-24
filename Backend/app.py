@@ -23,9 +23,10 @@ def create_app():
     # Initialize CORS
     CORS(app, resources={
         r"/api/*": {
-            "origins": "*",
+            "origins": ["http://localhost:5173", "http://16.16.204.22:10001", "http://16.16.204.22:5000"],
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization", "Accept"]
+            "allow_headers": ["Content-Type", "Authorization", "Accept"],
+            "supports_credentials": True
         }
     })
     
@@ -75,9 +76,14 @@ def create_app():
     
     @app.after_request
     def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        origin = request.headers.get('Origin')
+        if origin in ["http://localhost:5173", "http://16.16.204.22:10001", "http://16.16.204.22:5000"]:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+        else:
+            response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
         return response
     
     # WebSocket events
@@ -365,4 +371,4 @@ def create_app():
 app = create_app()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10001, debug=True)
+    socketio.run(app, host='0.0.0.0', port=10001, debug=True)

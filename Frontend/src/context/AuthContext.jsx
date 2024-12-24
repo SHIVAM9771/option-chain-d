@@ -10,7 +10,7 @@ import { auth } from '../config/firebase';
 import axios from 'axios';
 
 // Get the API URL from environment variables or use a default
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://16.16.204.22:10001';
 
 // Create axios instance with default config
 const api = axios.create({
@@ -19,7 +19,8 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json'
   },
-  timeout: 10000 // 10 second timeout
+  timeout: 10000, // 10 second timeout
+  withCredentials: true // Enable credentials
 });
 
 // Add request interceptor for debugging
