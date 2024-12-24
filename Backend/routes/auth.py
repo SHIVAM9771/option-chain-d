@@ -34,15 +34,18 @@ def register():
         db.session.add(user)
         db.session.commit()
         
-        # Create custom token
-        custom_token = firebase_admin.create_custom_token(user_record.uid)
+        # Create tokens
+        access_token = firebase_admin.create_custom_token(user_record.uid)
+        refresh_token = firebase_admin.create_custom_token(user_record.uid, expires_in=timedelta(days=30))
         
         return jsonify({
             "user": user.to_dict(),
-            "token": custom_token.decode('utf-8')
+            "access_token": access_token.decode('utf-8'),
+            "refresh_token": refresh_token.decode('utf-8')
         }), 201
         
     except Exception as e:
+        print(f"Registration error: {str(e)}")
         return jsonify({"error": str(e)}), 400
 
 @auth_bp.route("/login", methods=["POST", "OPTIONS"])
@@ -83,13 +86,39 @@ def login():
             db.session.add(user)
             db.session.commit()
         
+        # Create tokens
+        access_token = user_record['idToken']
+        refresh_token = user_record.get('refreshToken')
+        
         return jsonify({
             "user": user.to_dict(),
-            "token": user_record['idToken']
+            "access_token": access_token,
+            "refresh_token": refresh_token
         }), 200
         
     except Exception as e:
-        print(f"Login error: {str(e)}")  # Add debug logging
+        print(f"Login error: {str(e)}")
+        return jsonify({"error": str(e)}), 401
+
+@auth_bp.route("/refresh-token", methods=["POST"])
+@cross_origin()
+def refresh_token():
+    """Refresh access token using refresh token"""
+    try:
+        data = request.get_json()
+        if not data or 'refresh_token' not in data:
+            return jsonify({"error": "Refresh token is required"}), 400
+            
+        # Verify refresh token with Firebase
+        new_token = firebase_admin.refresh_token(data['refresh_token'])
+        
+        return jsonify({
+            "access_token": new_token['id_token'],
+            "refresh_token": new_token.get('refresh_token')
+        }), 200
+        
+    except Exception as e:
+        print(f"Token refresh error: {str(e)}")
         return jsonify({"error": str(e)}), 401
 
 @auth_bp.route("/verify-token", methods=["POST"])
@@ -115,6 +144,7 @@ def verify_token():
         }), 200
         
     except Exception as e:
+        print(f"Token verification error: {str(e)}")
         return jsonify({"error": str(e)}), 401
 
 @auth_bp.route("/logout", methods=["POST"])
@@ -127,39 +157,37 @@ def logout(current_user):
         firebase_admin.revoke_refresh_tokens(current_user.firebase_uid)
         return jsonify({"message": "Successfully logged out"}), 200
     except Exception as e:
+        print(f"Logout error: {str(e)}")
         return jsonify({"error": str(e)}), 400
 
-@auth_bp.route("/user/profile", methods=["GET"])
+@auth_bp.route("/profile", methods=["GET"])
 @cross_origin()
 @firebase_token_required
 def get_profile(current_user):
     """Get user profile"""
-    return jsonify(current_user.to_dict()), 200
+    return jsonify({"user": current_user.to_dict()}), 200
 
-@auth_bp.route("/user/profile", methods=["PUT"])
+@auth_bp.route("/profile", methods=["PUT"])
 @cross_origin()
 @firebase_token_required
 def update_profile(current_user):
     """Update user profile"""
     try:
         data = request.get_json()
-        
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+            
         # Update allowed fields
-        if 'username' in data:
-            current_user.username = data['username']
-        
-        # Update Firebase display name if username is changed
-        if 'username' in data:
-            firebase_admin.update_user(
-                current_user.firebase_uid,
-                display_name=current_user.username
-            )
-        
+        allowed_fields = ['username', 'preferences']
+        for field in allowed_fields:
+            if field in data:
+                setattr(current_user, field, data[field])
+                
         db.session.commit()
-        return jsonify(current_user.to_dict()), 200
+        return jsonify({"user": current_user.to_dict()}), 200
         
     except Exception as e:
-        db.session.rollback()
+        print(f"Profile update error: {str(e)}")
         return jsonify({"error": str(e)}), 400
 
 @auth_bp.route("/user/upgrade", methods=["POST"])
