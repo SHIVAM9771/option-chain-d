@@ -78,6 +78,9 @@ def after_request(response):
 db.init_app(app)
 mail.init_app(app)
 
+# Register blueprints
+app.register_blueprint(auth_bp, url_prefix='/api/auth')
+
 # Initialize SocketIO with CORS settings
 socketio = SocketIO(
     app,
@@ -98,9 +101,6 @@ limiter = Limiter(
     strategy="fixed-window",
     default_limits=["200 per day"],
 )
-
-# Register blueprints
-app.register_blueprint(auth_bp, url_prefix="/api/auth")
 
 # Create database tables
 with app.app_context():

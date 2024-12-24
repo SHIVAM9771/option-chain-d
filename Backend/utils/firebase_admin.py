@@ -2,13 +2,18 @@ import firebase_admin
 from firebase_admin import auth, credentials
 import requests
 import os
+from pathlib import Path
 
 class FirebaseAdmin:
     def __init__(self):
+        # Get the absolute path to the credentials file
+        base_dir = Path(__file__).resolve().parent.parent
+        cred_path = os.path.join(base_dir, 'credentials', 'firebase-credentials.json')
+        
         # Initialize Firebase Admin SDK
-        cred = credentials.Certificate(os.getenv('FIREBASE_ADMIN_SDK_PATH'))
+        cred = credentials.Certificate(cred_path)
         self.app = firebase_admin.initialize_app(cred)
-        self.api_key = os.getenv('FIREBASE_API_KEY')
+        self.api_key = "AIzaSyAoeZHm-azcBvHdEFEfnKYibK6bYHyXqLU"
         
     def create_user(self, email, password):
         """Create a new user with email and password"""
